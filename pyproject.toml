@@ -1,0 +1,37 @@
+[project]
+name = "clima-mollendo"
+version = "0.1.0"
+description = "Surf and weather forecast for Mollendo: swell partitions, wind, tide and individual-wave distributions"
+authors = [
+    { name = "Christopher Gocht", email = "chgocht@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "polars>=1.0",
+    "numpy>=2.0",
+    "requests>=2.32",
+    "plotly>=5.24",
+]
+
+[project.scripts]
+clima-mollendo = "clima_mollendo.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

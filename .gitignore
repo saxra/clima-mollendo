@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Data (confidential / raw, never commit)
+data/
+
+# Reports
+reports/*.html
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Env
+.env
+
+!data/raw/.gitkeep
+!data/processed/.gitkeep
