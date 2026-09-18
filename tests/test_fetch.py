@@ -1,17 +1,18 @@
 from datetime import datetime
 
 import polars as pl
+import pytest
 
 from clima_mollendo.fetch import parse_tides, track_swells
 from clima_mollendo.interactions import swell_interactions
 from clima_mollendo.spot import MOLLENDO, sector
 
 
-def _row(kind: str, clock: str, day: str, height: str) -> str:
+def _row(kind: str, clock: str, day: str, height: str, unit: str = "m") -> str:
     return (
         f"<tr><td>{kind} Tide</td><td><b>{clock}</b>"
         f'<span class="tide-day-tides__secondary">({day})</span></td>'
-        f'<td class="x"><b class="y">{height} m</b></td></tr>'
+        f'<td class="x"><b class="y">{height} {unit}</b></td></tr>'
     )
 
 
@@ -34,6 +35,19 @@ def test_parse_tides_dedups_and_rolls_year():
     assert df["time"][0] == datetime(2026, 9, 18, 0, 54)
     assert df["kind"].to_list() == ["high", "low", "low"]
     assert df["time"][-1] == datetime(2027, 1, 3, 13, 5)
+
+
+def test_parse_tides_converts_feet():
+    html = "tide times today on Friday 18 September 2026 x" + _row(
+        "High", "1:17 PM", "Fri 18 September", "1.38", "ft"
+    )
+    df = parse_tides(html)
+    assert df["height_m"][0] == pytest.approx(0.42, abs=0.01)
+
+
+def test_parse_tides_raises_when_empty():
+    with pytest.raises(ValueError):
+        parse_tides("tide times today on Friday 18 September 2026 nothing here")
 
 
 def _marine(rows: list[tuple]) -> pl.DataFrame:

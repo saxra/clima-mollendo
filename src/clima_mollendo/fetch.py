@@ -78,19 +78,23 @@ EMPTY_TIDES = pl.DataFrame(
 )
 
 _TIDE_ROW = re.compile(
-    r"<td>(High|Low) Tide</td><td><b>\s*([\d:]+ [AP]M)</b>"
+    r"<td>(High|Low) Tide</td><td><b>\s*([\d:]+\s*[AP]M)</b>"
     r'<span class="tide-day-tides__secondary">\(([^)]+)\)</span></td>'
-    r"<td[^>]*><b[^>]*>([\d.]+) m</b>"
+    r"<td[^>]*><b[^>]*>([\d.]+)\s*(m|ft)</b>"  # site picks units by visitor location
 )
+_FT_TO_M = 0.3048
 _TIDE_YEAR = re.compile(r"tide times today on \w+ \d+ \w+ (\d{4})")
 
 
 def parse_tides(html: str) -> pl.DataFrame:
     """Parse tide-forecast.com daily tables into (time, kind, height_m)."""
-    year = int(_TIDE_YEAR.search(html).group(1))
+    year_match = _TIDE_YEAR.search(html)
+    if year_match is None:
+        raise ValueError("tide page header not found")
+    year = int(year_match.group(1))
     rows, seen = [], set()
     prev_month = None
-    for kind, clock, day, height in _TIDE_ROW.findall(html):
+    for kind, clock, day, height, unit in _TIDE_ROW.findall(html):
         key = (kind, clock, day)
         if key in seen:
             continue
@@ -102,7 +106,10 @@ def parse_tides(html: str) -> pl.DataFrame:
             year += 1
             stamp = stamp.replace(year=year)
         prev_month = stamp.month
-        rows.append({"time": stamp, "kind": kind.lower(), "height_m": float(height)})
+        metres = float(height) * (_FT_TO_M if unit == "ft" else 1.0)
+        rows.append({"time": stamp, "kind": kind.lower(), "height_m": round(metres, 2)})
+    if not rows:
+        raise ValueError("no tide rows found in page")
     return pl.DataFrame(rows).sort("time")
 
 
