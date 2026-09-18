@@ -73,6 +73,10 @@ def fetch_marine(spot: Spot, days: int = 3) -> pl.DataFrame:
     return _hourly_frame(payload, MARINE_RENAME)
 
 
+EMPTY_TIDES = pl.DataFrame(
+    schema={"time": pl.Datetime("us"), "kind": pl.String, "height_m": pl.Float64}
+)
+
 _TIDE_ROW = re.compile(
     r"<td>(High|Low) Tide</td><td><b>\s*([\d:]+ [AP]M)</b>"
     r'<span class="tide-day-tides__secondary">\(([^)]+)\)</span></td>'

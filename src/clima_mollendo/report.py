@@ -6,21 +6,27 @@ from pathlib import Path
 import numpy as np
 import plotly.graph_objects as go
 import polars as pl
+from plotly.offline import get_plotlyjs_version
 from plotly.subplots import make_subplots
 
 from clima_mollendo.sea_state import partitions_from_row, wave_distribution
 from clima_mollendo.spot import Spot
 
+PLOTLY_CDN = (
+    f"https://cdnjs.cloudflare.com/ajax/libs/plotly.js/{get_plotlyjs_version()}/plotly.min.js"
+)
 TRACK_COLORS = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#ff7f0e", "#8c564b", "#17becf"]
 DAY_HOURS = range(6, 19)
 
 
 def tide_curve(tides: pl.DataFrame, times: pl.Series) -> pl.Series:
     """Cosine interpolation of tide height between consecutive extremes."""
-    ext_t = tides["time"].to_numpy().astype("datetime64[s]").astype(np.int64)
-    ext_h = tides["height_m"].to_numpy()
     q = times.to_numpy().astype("datetime64[s]").astype(np.int64)
     out = np.full(len(q), np.nan)
+    if tides.is_empty():
+        return pl.Series("tide_m", out)
+    ext_t = tides["time"].to_numpy().astype("datetime64[s]").astype(np.int64)
+    ext_h = tides["height_m"].to_numpy()
     for i in range(len(ext_t) - 1):
         t1, t2, h1, h2 = ext_t[i], ext_t[i + 1], ext_h[i], ext_h[i + 1]
         mask = (q >= t1) & (q <= t2)
@@ -380,7 +386,7 @@ def build_report(
     day_interactions = interactions.filter(pl.col("time").dt.hour().is_in(list(DAY_HOURS)))
     parts = [
         intro,
-        overview_figure(hourly, tracks, tides).to_html(full_html=False, include_plotlyjs="cdn"),
+        overview_figure(hourly, tracks, tides).to_html(full_html=False, include_plotlyjs=False),
         _html_table(table, "Tabla horaria (horas de luz)", fmt),
         dist_intro,
         distribution_figure(sims).to_html(full_html=False, include_plotlyjs=False),
@@ -396,7 +402,8 @@ def build_report(
         "tr.day-start td{border-top:3px solid #0077b6}"
     )
     html = (
-        f"<html><head><meta charset='utf-8'><style>{style}</style></head><body>"
+        f"<html><head><meta charset='utf-8'><title>{spot.name} surf</title>"
+        f"<script src='{PLOTLY_CDN}'></script><style>{style}</style></head><body>"
         + "\n".join(parts)
         + "</body></html>"
     )
