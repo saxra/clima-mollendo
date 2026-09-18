@@ -95,9 +95,9 @@ def hourly_table(
             "h_1_10",
             "h_max",
             "p_over_1.5",
-            "wind_kn",
+            "wind_kmh",
             "wind_dir",
-            "gust_kn",
+            "gust_kmh",
             "tide_m",
             "temp",
             "cloud",
@@ -161,11 +161,11 @@ def overview_figure(
             "Altura (m): swells, Hs total y Hmax esperada — fondo = chico/medio/grande",
             "Periodo (s)",
             "Dirección de origen (°)",
-            "Viento (kn) — fondo = flojo/medio/fuerte",
+            "Viento (km/h) — fondo = flojo/medio/fuerte",
             "Marea (m)",
         ),
     )
-    hs_scale, wind_scale = SCALES["hs"], SCALES["wind_kn"]
+    hs_scale, wind_scale = SCALES["hs"], SCALES["wind_kmh"]
     h_max = [summaries[t]["h_max"] if t in summaries else None for t in hourly["time"]]
     top_h = max([v for v in h_max if v is not None] + [float(hourly["hs"].max())]) * 1.15
     for tid, grp in tracks.group_by("track", maintain_order=True):
@@ -273,18 +273,18 @@ def overview_figure(
     fig.add_trace(
         go.Scatter(
             x=hourly["time"],
-            y=hourly["wind_kn"],
+            y=hourly["wind_kmh"],
             name="Viento",
             mode="lines+markers",
             line={"color": "#2c3e50", "width": 2},
             marker={
-                "color": hourly["wind_kn"],
+                "color": hourly["wind_kmh"],
                 "colorscale": PLOTLY_SCALE,
                 "cmin": wind_scale.lo,
                 "cmax": wind_scale.hi,
                 "size": 7,
             },
-            hovertemplate="%{y:.0f} kn",
+            hovertemplate="%{y:.0f} km/h",
         ),
         4,
         1,
@@ -292,10 +292,10 @@ def overview_figure(
     fig.add_trace(
         go.Scatter(
             x=hourly["time"],
-            y=hourly["gust_kn"],
+            y=hourly["gust_kmh"],
             name="Ráfagas",
             line={"color": "gray", "dash": "dot"},
-            hovertemplate="ráfaga %{y:.0f} kn",
+            hovertemplate="ráfaga %{y:.0f} km/h",
         ),
         4,
         1,
@@ -333,7 +333,7 @@ def overview_figure(
     )
     # Shapes must be added after the traces: add_hrect/add_vrect skip subplots with no data.
     _add_bands(fig, hs_scale, 1, top_h)
-    _add_bands(fig, wind_scale, 4, float(hourly["gust_kn"].max()) * 1.15)
+    _add_bands(fig, wind_scale, 4, float(hourly["gust_kmh"].max()) * 1.15)
     _shade_nights(fig, hourly, 5)
     fig.update_yaxes(range=[0, top_h], row=1, col=1)
     fig.update_yaxes(range=[0, 360], dtick=90, row=3, col=1)
@@ -497,9 +497,9 @@ def session_cards(
                 continue
             hs = float(sess["hs"].mean())
             hmax = sess["h_max"].max()
-            wind = float(sess["wind_kn"].mean())
+            wind = float(sess["wind_kmh"].mean())
             wind_dir = float(sess["wind_dir"].mean())
-            gust = float(sess["gust_kn"].max())
+            gust = float(sess["gust_kmh"].max())
             rain = float(sess["rain_prob"].max())
             tide = sess["tide_m"].drop_nulls()
             tide_txt = (
@@ -517,7 +517,7 @@ def session_cards(
                 f"<div class='kpi' {SCALES['hs'].css(hs)}>Hs <b>{hs:.2f} m</b> "
                 f"<small>{SCALES['hs'].label(hs)}</small></div>"
                 f"<div class='kpi' {SCALES['h_max'].css(hmax)}>Hmax <b>{hmax:.2f} m</b></div>"
-                f"<div class='kpi' {SCALES['wind_kn'].css(wind)}>Viento <b>{wind:.0f} kn</b> "
+                f"<div class='kpi' {SCALES['wind_kmh'].css(wind)}>Viento <b>{wind:.0f} km/h</b> "
                 f"{wind_dir:.0f}° <small>ráf. {gust:.0f}</small></div>"
                 f"<div class='kpi' {SCALES['rain_prob'].css(rain)}>Lluvia <b>{rain:.0f} %</b></div>"
                 f"<div class='kpi'>Marea {tide_txt}</div>"
@@ -531,6 +531,78 @@ def session_cards(
         "<span style='background:#e74c3c'></span> grande / fuerte</p>"
     )
     return "<h2>Resumen por sesión</h2>" + legend + "".join(cards)
+
+
+WIND_LEVELS = [
+    (0, 6, "Calma", "Espejo, el mar queda perfecto."),
+    (6, 18, "Suave", "Ideal; si es terral (de tierra) peina la ola."),
+    (18, 33, "Moderado", "Empieza a texturar; onshore ya molesta."),
+    (33, 50, "Fuerte", "Mar picado, sesión difícil."),
+    (50, 999, "Muy fuerte", "No se surfea."),
+]
+
+
+def reading_guide() -> str:
+    """Glossary of the numbers in the report and a wind reference table (km/h)."""
+    glossary = [
+        (
+            "Hs",
+            "Altura significativa: promedio del tercio de olas más grandes. Es la que dan "
+            "todos los pronósticos y la que 'se ve' desde la orilla en un set normal.",
+        ),
+        (
+            "H1/10",
+            "Promedio del 10 % de olas más grandes: el tamaño típico de las olas buenas de un set.",
+        ),
+        (
+            "Hmax",
+            "La ola más grande que se espera en una sesión de 2 h. Si Hmax es mucho mayor "
+            "que Hs, el día es 'chico pero traicionero': hay sets que vienen de la nada.",
+        ),
+        ("P(H>1.5)", "Porcentaje de olas de la sesión que superan 1.5 m."),
+        (
+            "Swell #n",
+            "Cada tren de olas que llega al spot: altura · periodo · dirección de "
+            "origen. Se numeran para seguirlos en el tiempo; el modelo puede reportar hasta 3.",
+        ),
+        (
+            "Periodo",
+            "Segundos entre olas. Más periodo = más energía y olas más ordenadas: "
+            "&lt; 8 s mar de viento, 9–12 s swell normal, &gt; 13 s swell de fondo potente.",
+        ),
+        (
+            "Dirección",
+            "De dónde viene, en grados: 180° = del sur, 225° = del suroeste, 270° = del oeste.",
+        ),
+        (
+            "Marea",
+            "Altura del mar sobre el nivel de referencia; ▲ alta, ▼ baja. En Mollendo el "
+            "rango es chico (≈0.5 m).",
+        ),
+        (
+            "Ola esperada",
+            "Izquierdas / derechas según la combinación de swells. Es una "
+            "hipótesis en calibración; 'uncalibrated' = combinación aún sin regla.",
+        ),
+    ]
+    items = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in glossary)
+    scale = SCALES["wind_kmh"]
+    rows = "".join(
+        f"<tr><td {scale.css(min(lo + 4, 60))}>{lo}–{hi if hi < 999 else '…'} km/h</td>"
+        f"<td><b>{name}</b></td><td>{note}</td></tr>"
+        for lo, hi, name, note in WIND_LEVELS
+    )
+    wind = (
+        "<h3>Viento (km/h)</h3><table class='ref'><thead><tr><th>Velocidad</th><th>Nivel</th>"
+        f"<th>Qué significa para surfear</th></tr></thead><tbody>{rows}</tbody></table>"
+        "<p>Las ráfagas son picos de segundos; el valor principal es el viento sostenido. "
+        "Con la playa mirando al suroeste, viento del este/noreste es terral (bueno) y del "
+        "oeste/suroeste es onshore (malo).</p>"
+    )
+    return (
+        "<details class='guide'><summary><b>Cómo leer este reporte</b> (glosario y escala de "
+        f"viento)</summary><dl>{items}</dl>{wind}</details>"
+    )
 
 
 def _html_table(
@@ -597,6 +669,9 @@ STYLE = (
     ".kpi small{color:#555}"
     ".legend span{display:inline-block;width:14px;height:14px;border-radius:3px;"
     "vertical-align:middle}"
+    ".guide{background:#f7f9fb;border:1px solid #e1e6ea;border-radius:8px;padding:8px 14px;"
+    "margin:12px 0}.guide summary{cursor:pointer}.guide dt{font-weight:600;margin-top:8px}"
+    ".guide dd{margin:2px 0 0 0}.guide table.ref{width:auto;margin-top:6px}"
 )
 
 
@@ -615,9 +690,9 @@ def build_report(
     table = hourly_table(hourly, tracks, summaries)
     fmt = {
         "hs": "{:.2f}",
-        "wind_kn": "{:.0f}",
+        "wind_kmh": "{:.0f}",
         "wind_dir": "{:.0f}°",
-        "gust_kn": "{:.0f}",
+        "gust_kmh": "{:.0f}",
         "tide_m": "{:.2f}",
         "h_1_10": "{:.2f}",
         "h_max": "{:.2f}",
@@ -634,8 +709,8 @@ def build_report(
         "h_1_10": ("h_1_10", SCALES["h_1_10"]),
         "h_max": ("h_max", SCALES["h_max"]),
         "p_over_1.5": ("p_over_1.5", SCALES["p_over_1.5"]),
-        "wind_kn": ("wind_kn", SCALES["wind_kn"]),
-        "gust_kn": ("gust_kn", SCALES["gust_kn"]),
+        "wind_kmh": ("wind_kmh", SCALES["wind_kmh"]),
+        "gust_kmh": ("gust_kmh", SCALES["gust_kmh"]),
         "rain_prob": ("rain_prob", SCALES["rain_prob"]),
     }
     ifmt = {"energy_ratio": "{:.2f}", "beat_period_s": "{:.0f}", "rel_angle_deg": "{:.0f}°"}
@@ -655,6 +730,7 @@ def build_report(
     day_interactions = interactions.filter(pl.col("time").dt.hour().is_in(list(DAY_HOURS)))
     parts = [
         intro,
+        reading_guide(),
         session_cards(hourly, summaries, interactions),
         "<h2>Evolución horaria</h2>",
         overview_figure(hourly, tracks, tides, summaries).to_html(

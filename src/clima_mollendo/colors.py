@@ -58,8 +58,8 @@ SCALES: dict[str, Scale] = {
     "h_1_10": Scale(0.8, 1.8, 3.0, "m"),
     "h_max": Scale(1.0, 2.2, 3.5, "m"),
     "period": Scale(6.0, 11.0, 16.0, "s"),
-    "wind_kn": Scale(3.0, 10.0, 18.0, "kn"),
-    "gust_kn": Scale(5.0, 15.0, 25.0, "kn"),
+    "wind_kmh": Scale(6.0, 18.0, 33.0, "km/h"),
+    "gust_kmh": Scale(9.0, 28.0, 46.0, "km/h"),
     "rain_prob": Scale(10.0, 50.0, 90.0, "%"),
     "p_over_1.5": Scale(0.0, 0.05, 0.2, ""),
 }

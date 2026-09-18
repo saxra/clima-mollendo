@@ -17,9 +17,9 @@ WEATHER_RENAME = {
     "temperature_2m": "temp",
     "cloud_cover": "cloud",
     "precipitation_probability": "rain_prob",
-    "wind_speed_10m": "wind_kn",
+    "wind_speed_10m": "wind_kmh",
     "wind_direction_10m": "wind_dir",
-    "wind_gusts_10m": "gust_kn",
+    "wind_gusts_10m": "gust_kmh",
 }
 MARINE_RENAME = {
     "wave_height": "hs",
@@ -47,14 +47,14 @@ def _hourly_frame(payload: dict, rename: dict[str, str]) -> pl.DataFrame:
 
 
 def fetch_weather(spot: Spot, days: int = 3) -> pl.DataFrame:
-    """Hourly atmospheric forecast; wind in knots, directions in degrees (from)."""
+    """Hourly atmospheric forecast; wind in km/h, directions in degrees (from)."""
     params = {
         "latitude": spot.lat,
         "longitude": spot.lon,
         "hourly": ",".join(WEATHER_RENAME),
         "timezone": spot.timezone,
         "forecast_days": days,
-        "wind_speed_unit": "kn",
+        "wind_speed_unit": "kmh",
     }
     payload = requests.get(WEATHER_URL, params=params, timeout=30).json()
     return _hourly_frame(payload, WEATHER_RENAME)
