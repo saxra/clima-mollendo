@@ -12,6 +12,7 @@ from plotly.subplots import make_subplots
 from clima_mollendo.colors import PLOTLY_SCALE, SCALES, Scale
 from clima_mollendo.sea_state import partitions_from_row, wave_distribution
 from clima_mollendo.spot import Spot
+from clima_mollendo.wind import score_wind
 
 PLOTLY_CDN = (
     f"https://cdnjs.cloudflare.com/ajax/libs/plotly.js/{get_plotlyjs_version()}/plotly.min.js"
@@ -95,9 +96,11 @@ def hourly_table(
             "h_1_10",
             "h_max",
             "p_over_1.5",
+            "wind_eff",
+            "wind_rel",
             "wind_kmh",
-            "wind_dir",
             "gust_kmh",
+            "wind_dir",
             "tide_m",
             "temp",
             "cloud",
@@ -161,11 +164,11 @@ def overview_figure(
             "Altura (m): swells, Hs total y Hmax esperada — fondo = chico/medio/grande",
             "Periodo (s)",
             "Dirección de origen (°)",
-            "Viento (km/h) — fondo = flojo/medio/fuerte",
+            "Viento efectivo onshore (km/h) — fondo = inofensivo/molesta/destruye",
             "Marea (m)",
         ),
     )
-    hs_scale, wind_scale = SCALES["hs"], SCALES["wind_kmh"]
+    hs_scale, wind_scale = SCALES["hs"], SCALES["wind_eff"]
     h_max = [summaries[t]["h_max"] if t in summaries else None for t in hourly["time"]]
     top_h = max([v for v in h_max if v is not None] + [float(hourly["hs"].max())]) * 1.15
     for tid, grp in tracks.group_by("track", maintain_order=True):
@@ -270,21 +273,47 @@ def overview_figure(
         3,
         1,
     )
+    wind_hover = [
+        f"efectivo {e:.0f} km/h · {r} · sostenido {w:.0f} · ráfaga {g:.0f} · {d:.0f}°"
+        + (" · ⚠ brisa térmica" if th else "")
+        for e, r, w, g, d, th in zip(
+            hourly["wind_eff"],
+            hourly["wind_rel"],
+            hourly["wind_kmh"],
+            hourly["gust_kmh"],
+            hourly["wind_dir"],
+            hourly["thermal"],
+            strict=True,
+        )
+    ]
+    fig.add_trace(
+        go.Scatter(
+            x=hourly["time"],
+            y=hourly["wind_eff"],
+            name="Viento efectivo (onshore)",
+            mode="lines+markers",
+            line={"color": "#2c3e50", "width": 3},
+            marker={
+                "color": hourly["wind_eff"],
+                "colorscale": PLOTLY_SCALE,
+                "cmin": wind_scale.lo,
+                "cmax": wind_scale.hi,
+                "size": 9,
+                "line": {"color": "white", "width": 1},
+            },
+            text=wind_hover,
+            hovertemplate="%{text}",
+        ),
+        4,
+        1,
+    )
     fig.add_trace(
         go.Scatter(
             x=hourly["time"],
             y=hourly["wind_kmh"],
-            name="Viento",
-            mode="lines+markers",
-            line={"color": "#2c3e50", "width": 2},
-            marker={
-                "color": hourly["wind_kmh"],
-                "colorscale": PLOTLY_SCALE,
-                "cmin": wind_scale.lo,
-                "cmax": wind_scale.hi,
-                "size": 7,
-            },
-            hovertemplate="%{y:.0f} km/h",
+            name="Sostenido",
+            line={"color": "#7f8c8d", "width": 1},
+            hoverinfo="skip",
         ),
         4,
         1,
@@ -294,8 +323,21 @@ def overview_figure(
             x=hourly["time"],
             y=hourly["gust_kmh"],
             name="Ráfagas",
-            line={"color": "gray", "dash": "dot"},
-            hovertemplate="ráfaga %{y:.0f} km/h",
+            line={"color": "#7f8c8d", "dash": "dot", "width": 1},
+            hoverinfo="skip",
+        ),
+        4,
+        1,
+    )
+    thermal = hourly.filter("thermal")
+    fig.add_trace(
+        go.Scatter(
+            x=thermal["time"],
+            y=thermal["gust_kmh"],
+            name="⚠ brisa térmica probable",
+            mode="markers",
+            marker={"symbol": "triangle-down", "size": 9, "color": "#c0392b"},
+            hoverinfo="skip",
         ),
         4,
         1,
@@ -497,9 +539,13 @@ def session_cards(
                 continue
             hs = float(sess["hs"].mean())
             hmax = sess["h_max"].max()
+            wind_eff = float(sess["wind_eff"].max())
+            wind_eff_min = float(sess["wind_eff"].min())
             wind = float(sess["wind_kmh"].mean())
-            wind_dir = float(sess["wind_dir"].mean())
             gust = float(sess["gust_kmh"].max())
+            rel = sess["wind_rel"].drop_nulls().mode()
+            rel_txt = rel[0] if len(rel) else "—"
+            thermal_txt = " ⚠ brisa térmica" if sess["thermal"].any() else ""
             rain = float(sess["rain_prob"].max())
             tide = sess["tide_m"].drop_nulls()
             tide_txt = (
@@ -517,8 +563,10 @@ def session_cards(
                 f"<div class='kpi' {SCALES['hs'].css(hs)}>Hs <b>{hs:.2f} m</b> "
                 f"<small>{SCALES['hs'].label(hs)}</small></div>"
                 f"<div class='kpi' {SCALES['h_max'].css(hmax)}>Hmax <b>{hmax:.2f} m</b></div>"
-                f"<div class='kpi' {SCALES['wind_kmh'].css(wind)}>Viento <b>{wind:.0f} km/h</b> "
-                f"{wind_dir:.0f}° <small>ráf. {gust:.0f}</small></div>"
+                f"<div class='kpi' {SCALES['wind_eff'].css(wind_eff)}>Viento <b>{rel_txt}</b> "
+                f"efectivo <b>{wind_eff_min:.0f}–{wind_eff:.0f} km/h</b> "
+                f"<small>sost. {wind:.0f} · ráf. {gust:.0f}"
+                f"{thermal_txt}</small></div>"
                 f"<div class='kpi' {SCALES['rain_prob'].css(rain)}>Lluvia <b>{rain:.0f} %</b></div>"
                 f"<div class='kpi'>Marea {tide_txt}</div>"
                 f"<div class='kpi'>Ola esperada: <b>{wave_txt}</b></div>"
@@ -595,9 +643,12 @@ def reading_guide() -> str:
     wind = (
         "<h3>Viento (km/h)</h3><table class='ref'><thead><tr><th>Velocidad</th><th>Nivel</th>"
         f"<th>Qué significa para surfear</th></tr></thead><tbody>{rows}</tbody></table>"
-        "<p>Las ráfagas son picos de segundos; el valor principal es el viento sostenido. "
-        "Con la playa mirando al suroeste, viento del este/noreste es terral (bueno) y del "
-        "oeste/suroeste es onshore (malo).</p>"
+        "<p><b>Viento efectivo</b>: promedio de sostenido y ráfaga, multiplicado por cuánto "
+        "sopla hacia la playa (onshore = 1, side = 0.5, terral = 0). Es el número que colorea "
+        "el viento en todo el reporte. El modelo subestima la brisa de la tarde: cuando la "
+        "ráfaga es más de 2.5× el sostenido aparece ⚠ brisa térmica. Con la playa mirando al "
+        "suroeste, viento del este/noreste es <b>terral</b> (offshore, peina la ola) y del "
+        "oeste/suroeste es <b>onshore</b> (aplasta y desordena).</p>"
     )
     return (
         "<details class='guide'><summary><b>Cómo leer este reporte</b> (glosario y escala de "
@@ -684,12 +735,13 @@ def build_report(
     out: Path,
 ) -> Path:
     """Assemble all figures into one self-contained HTML file."""
-    hourly = hourly.with_columns(tide_curve(tides, hourly["time"]))
+    hourly = score_wind(hourly.with_columns(tide_curve(tides, hourly["time"])), spot)
     sims = simulate_hours(hourly)
     summaries = {k: v[1] for k, v in sims.items()}
     table = hourly_table(hourly, tracks, summaries)
     fmt = {
         "hs": "{:.2f}",
+        "wind_eff": "{:.0f}",
         "wind_kmh": "{:.0f}",
         "wind_dir": "{:.0f}°",
         "gust_kmh": "{:.0f}",
@@ -709,6 +761,8 @@ def build_report(
         "h_1_10": ("h_1_10", SCALES["h_1_10"]),
         "h_max": ("h_max", SCALES["h_max"]),
         "p_over_1.5": ("p_over_1.5", SCALES["p_over_1.5"]),
+        "wind_eff": ("wind_eff", SCALES["wind_eff"]),
+        "wind_rel": ("wind_eff", SCALES["wind_eff"]),
         "wind_kmh": ("wind_kmh", SCALES["wind_kmh"]),
         "gust_kmh": ("gust_kmh", SCALES["gust_kmh"]),
         "rain_prob": ("rain_prob", SCALES["rain_prob"]),

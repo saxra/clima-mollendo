@@ -60,6 +60,7 @@ SCALES: dict[str, Scale] = {
     "period": Scale(6.0, 11.0, 16.0, "s"),
     "wind_kmh": Scale(6.0, 18.0, 33.0, "km/h"),
     "gust_kmh": Scale(9.0, 28.0, 46.0, "km/h"),
+    "wind_eff": Scale(5.0, 14.0, 25.0, "km/h"),  # gust-weighted onshore component
     "rain_prob": Scale(10.0, 50.0, 90.0, "%"),
     "p_over_1.5": Scale(0.0, 0.05, 0.2, ""),
 }
