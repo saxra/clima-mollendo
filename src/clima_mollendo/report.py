@@ -519,6 +519,52 @@ def distribution_figure(sims: dict[datetime, tuple[pl.DataFrame, dict]]) -> go.F
     return fig
 
 
+REL_SHORT = {"onshore": "on", "side-on": "s-on", "side-off": "s-off", "terral": "terral"}
+
+
+def hourly_strip(hourly: pl.DataFrame, summaries: dict[datetime, dict]) -> str:
+    """One compact table per day: hours as columns, colour-coded Hs, Hmax, wind and tide."""
+    blocks = []
+    for (day,), grp in hourly.group_by(pl.col("time").dt.date(), maintain_order=True):
+        rows = grp.filter(pl.col("time").dt.hour().is_in(list(DAY_HOURS))).sort("time")
+        if rows.is_empty():
+            continue
+        head = "".join(f"<th>{t.hour:02d}</th>" for t in rows["time"])
+        hs_cells, hmax_cells, wind_cells, rel_cells, tide_cells = [], [], [], [], []
+        for r in rows.iter_rows(named=True):
+            hs = r["hs"]
+            hmax = summaries.get(r["time"], {}).get("h_max")
+            eff, rel, thermal, tide = r["wind_eff"], r["wind_rel"], r["thermal"], r["tide_m"]
+            hs_cells.append(f"<td {SCALES['hs'].css(hs)}>{hs:.1f}</td>")
+            hmax_cells.append(
+                f"<td {SCALES['h_max'].css(hmax)}>{hmax:.1f}</td>" if hmax else "<td>—</td>"
+            )
+            flag = " ⚠" if thermal else ""
+            wind_cells.append(
+                f"<td {SCALES['wind_eff'].css(eff)}>{eff:.0f}{flag}</td>"
+                if eff is not None
+                else "<td>—</td>"
+            )
+            rel_cells.append(
+                f"<td {SCALES['wind_eff'].css(eff)}><small>{REL_SHORT.get(rel, '—')}</small></td>"
+            )
+            tide_cells.append(f"<td>{tide:.2f}</td>" if tide == tide else "<td>—</td>")
+        title = f"{DAYS_ES_LONG[day.weekday()]} {day:%d/%m}"
+        blocks.append(
+            f"<h3>{title}</h3><table class='strip'><thead><tr><th>hora</th>{head}</tr></thead>"
+            f"<tbody><tr><th>Hs (m)</th>{''.join(hs_cells)}</tr>"
+            f"<tr><th>Hmax (m)</th>{''.join(hmax_cells)}</tr>"
+            f"<tr><th>Viento ef. (km/h)</th>{''.join(wind_cells)}</tr>"
+            f"<tr><th>Viento rel.</th>{''.join(rel_cells)}</tr>"
+            f"<tr><th>Marea (m)</th>{''.join(tide_cells)}</tr></tbody></table>"
+        )
+    note = (
+        "<p><small>Viento ef. = viento efectivo onshore; ⚠ = brisa térmica probable. "
+        "on = onshore, s-on = side-on, s-off = side-off.</small></p>"
+    )
+    return "<h2>Hora a hora</h2>" + note + "".join(blocks)
+
+
 def session_cards(
     hourly: pl.DataFrame, summaries: dict[datetime, dict], interactions: pl.DataFrame
 ) -> str:
@@ -713,6 +759,9 @@ STYLE = (
     "th{background:#f0f0f0;position:sticky;top:0}"
     "tr.day-start td{border-top:3px solid #0077b6}"
     ".day h3{margin:12px 0 6px}.cards{display:flex;gap:12px;flex-wrap:wrap}"
+    "table.strip{width:auto;margin-bottom:10px;font-size:14px}"
+    "table.strip td{text-align:center;min-width:40px}"
+    "table.strip th{position:static;white-space:nowrap}"
     ".card{flex:1 1 280px;background:#fafafa;border:1px solid #e5e5e5;border-radius:8px;"
     "padding:10px 12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}"
     ".card-title{font-weight:600;margin-bottom:6px}"
@@ -786,6 +835,7 @@ def build_report(
         intro,
         reading_guide(),
         session_cards(hourly, summaries, interactions),
+        hourly_strip(hourly, summaries),
         "<h2>Evolución horaria</h2>",
         overview_figure(hourly, tracks, tides, summaries).to_html(
             full_html=False, include_plotlyjs=False
