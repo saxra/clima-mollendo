@@ -9,7 +9,8 @@ build/
 .ruff_cache/
 
 # Data (confidential / raw, never commit)
-data/
+data/*
+!data/observations.csv
 
 # Reports
 reports/*.html
